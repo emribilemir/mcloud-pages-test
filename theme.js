@@ -2800,4 +2800,4 @@
   document.body.classList.add('am-ready');bindToolbar();go('/');
 })();
 
-/* mcloud-pages-test marker=9 */
+/* mcloud-pages-test marker=10 */
