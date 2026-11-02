@@ -105,7 +105,8 @@ jobs:
         uses: actions/deploy-pages@v5
         with:
           artifact_name: ${{ (inputs.simulate == 'deploy-error' || inputs.simulate == 'fail-all') && 'missing' || inputs.simulate == 'stale' && 'stale' || 'github-pages' }}
-      # GitHub's edge purges on deploy: in tests every region served the new build within two minutes.
+      # A deploy that reports success can still leave the old files live, so poll until both files carry the new
+      # stamp twice in a row (the edge keeps serving the old ones for a few seconds after the deploy reports success).
       - name: Verify
         id: verify
         if: steps.deploy.outcome == 'success'
@@ -115,14 +116,16 @@ jobs:
         run: &verify |
           base="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}"
           want="/* mcloud build ${{ steps.stamp.outputs.sha }} */"
+          seen=0
           for i in $(seq 1 40); do
             ok=1
             for f in theme.js user.css; do
-              curl -fsSL "$base/$f" -o "/tmp/$f" || { ok=0; continue; }
+              curl -fsSL "$base/$f?time=$(date +%s%N)" -o "/tmp/$f" || { ok=0; continue; }
               got=$(head -1 "/tmp/$f")
               [ "$got" = "$want" ] || { ok=0; echo "$f: ${got:0:80}"; }
             done
-            [ "$ok" = 1 ] && { echo "Both files serve ${{ steps.stamp.outputs.sha }}."; exit 0; }
+            if [ "$ok" = 1 ]; then seen=$((seen + 1)); else seen=0; fi
+            [ "$seen" = 2 ] && { echo "Both files serve ${{ steps.stamp.outputs.sha }}."; exit 0; }
             sleep 15
           done
           echo "::$LEVEL::Pages still serves another build after 10 minutes"
