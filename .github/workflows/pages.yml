@@ -29,7 +29,7 @@ jobs:
     outputs:
       deploy: ${{ steps.live.outputs.deploy }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
@@ -70,7 +70,7 @@ jobs:
       group: pages
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
@@ -84,9 +84,8 @@ jobs:
           sed -i "s/const BUILD = 'dev'/const BUILD = '$sha'/" _site/theme.js
           [ "$(grep -c "const BUILD = '$sha'" _site/theme.js)" = 1 ] || { echo "::error::theme.js has no single BUILD = 'dev'"; exit 1; }
           node --check _site/theme.js
-          touch _site/.nojekyll
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
       - name: Build a stale artifact (test only)
@@ -95,16 +94,15 @@ jobs:
           old=$(git log -2 --format=%H -- theme.js user.css | tail -1)
           mkdir _stale
           for f in theme.js user.css; do printf '/* mcloud build %s */\n' "$old" > "_stale/$f"; git show "$old:$f" >> "_stale/$f"; done
-          touch _stale/.nojekyll
       - if: inputs.simulate == 'stale'
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _stale
           name: stale
       - name: Deploy
         id: deploy
         continue-on-error: true
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
         with:
           artifact_name: ${{ (inputs.simulate == 'deploy-error' || inputs.simulate == 'fail-all') && 'missing' || inputs.simulate == 'stale' && 'stale' || 'github-pages' }}
       # GitHub's edge purges on deploy: in tests every region served the new build within two minutes.
@@ -132,7 +130,7 @@ jobs:
       - name: Deploy again
         id: redeploy
         if: steps.deploy.outcome != 'success' || steps.verify.outcome != 'success'
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
         with:
           artifact_name: ${{ inputs.simulate == 'fail-all' && 'missing' || 'github-pages' }}
       - name: Verify again
