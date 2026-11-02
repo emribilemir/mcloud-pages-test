@@ -1,0 +1,2 @@
+{ "name": "mcloud-pages-test", "description": "Throwaway GitHub Pages cache test for mcloud (#77). Will be deleted.",
+  "usercss": "user.css", "include": ["https://emribilemir.github.io/mcloud-pages-test/theme.js"], "authors": [{ "name": "emribilemir" }], "tags": [] }
