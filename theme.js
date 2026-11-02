@@ -1,4 +1,4 @@
-/* mcloud-pages-test marker=7 */
+/* mcloud-pages-test marker=8 */
 /* AppleMusicMac 2.8. Local theme UI; no remote scripts or credentials. */
 (async () => {
   if (window.__appleMusicMac) return;
