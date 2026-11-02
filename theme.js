@@ -1,8 +1,58 @@
-/* mcloud-pages-test marker=9 */
 /* AppleMusicMac 2.8. Local theme UI; no remote scripts or credentials. */
 (async () => {
   if (window.__appleMusicMac) return;
   window.__appleMusicMac = true;
+  // Marketplace loads theme.js and user.css from GitHub Pages. Its deploy (.github/workflows/pages.yml) writes the
+  // commit here and on both files' first line; jsDelivr and local copies keep 'dev'.
+  const BUILD = 'dev', REPO = 'bulutakbulutt/mcloud', PAGES = 'https://bulutakbulutt.github.io/mcloud/';
+  const pages = window.__amPages = { build: BUILD };
+  // Installs made before Pages stored jsDelivr @main URLs (or raw ones Marketplace sends to jsDelivr). Marketplace
+  // read them before this script ran and can write its in-memory copy back (its update check rebuilds the record from
+  // manifest.json, whose usercss stays relative so the record's key does not change), so this runs on every start
+  // and writes only when a URL changed. IndexedDB for Marketplace 1.0.9+, localStorage before; never creates the db.
+  pages.migration = (async () => {
+    const OLD = new Set(['theme.js', 'user.css'].flatMap(f => [`https://cdn.jsdelivr.net/gh/${REPO}@main/${f}`, `https://raw.githubusercontent.com/${REPO}/main/${f}`]));
+    const toPages = u => OLD.has(u) ? PAGES + u.slice(u.lastIndexOf('/') + 1) : u;
+    const rewrite = json => {
+      let r; try { r = JSON.parse(json); } catch { return null; }
+      if (!r || r.user !== 'bulutakbulutt' || r.repo !== 'mcloud') return null;
+      const urls = () => JSON.stringify([r.cssURL, r.include, r.manifest?.include]), before = urls();
+      r.cssURL = toPages(r.cssURL);
+      if (Array.isArray(r.include)) r.include = r.include.map(toPages);
+      if (Array.isArray(r.manifest?.include)) r.manifest.include = r.manifest.include.map(toPages);
+      return urls() === before ? null : JSON.stringify(r);
+    };
+    const ACTIVE = 'marketplace:theme-installed', mine = k => typeof k === 'string' && k.startsWith(`marketplace:installed:${REPO}/`);
+    const db = await new Promise(res => {
+      try { const q = indexedDB.open('spicetify-marketplace'); q.onupgradeneeded = () => q.transaction.abort(); q.onsuccess = () => res(q.result); q.onerror = q.onblocked = () => res(null); }
+      catch { res(null); }
+    });
+    if (db && !db.objectStoreNames.contains('settings')) { db.close(); return 'no-store'; }
+    if (db) return new Promise(res => {
+      let out = 'not-active';
+      const tx = db.transaction('settings', 'readwrite'), st = tx.objectStore('settings');
+      st.get(ACTIVE).onsuccess = e => { const k = e.target.result?.value; if (mine(k)) { out = 'unchanged'; st.get(k).onsuccess = e2 => {
+        const v = e2.target.result && rewrite(e2.target.result.value); if (v) { st.put({ key: k, value: v }); out = 'migrated'; } }; } };
+      tx.oncomplete = () => { db.close(); res(out); };
+      tx.onerror = tx.onabort = () => { db.close(); res('error'); };
+    });
+    try { const k = localStorage.getItem(ACTIVE); if (!mine(k)) return 'not-active'; const v = rewrite(localStorage.getItem(k)); if (!v) return 'unchanged'; localStorage.setItem(k, v); return 'migrated'; }
+    catch { return 'error'; }
+  })();
+  // Pages deploys both files together, but each edge caches them separately (and a record rebuilt from manifest.json
+  // loads the CSS from jsDelivr until the next start), so a start can pair this script with another commit's CSS.
+  // A stamped script wins: it loads its own commit's user.css from an immutable URL into Marketplace's style.
+  pages.css = (async () => {
+    if (!/^[0-9a-f]{40}$/.test(BUILD)) return 'unstamped';
+    const st = document.querySelector('style.marketplaceUserCSS'), head = st?.textContent.slice(0, 300) || '';
+    if (!head.includes('AppleMusicMac')) return 'no-css';
+    if (head.startsWith(`/* mcloud build ${BUILD} */`)) return 'match';
+    for (const u of [`https://cdn.jsdelivr.net/gh/${REPO}@${BUILD}/user.css`, `https://raw.githubusercontent.com/${REPO}/${BUILD}/user.css`]) {
+      try { const r = await fetch(u), css = r.ok ? await r.text() : ''; if (css.slice(0, 200).includes('AppleMusicMac')) { st.textContent = `/* mcloud build ${BUILD} */\n` + css; return 'replaced'; } }
+      catch {}
+    }
+    return 'failed';
+  })();
   const wait = ms => new Promise(r => setTimeout(r, ms));
   for (let i = 0; i < 240 && !window.Spicetify?.Platform?.History; i++) await wait(250);
   const S = window.Spicetify;
@@ -2749,3 +2799,5 @@
   }
   document.body.classList.add('am-ready');bindToolbar();go('/');
 })();
+
+/* mcloud-pages-test marker=0 */
