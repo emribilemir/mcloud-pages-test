@@ -11,11 +11,15 @@ on:
     paths: [theme.js, user.css, .github/workflows/pages.yml]
   workflow_dispatch:
     inputs:
+      attempt:
+        description: Retry count (set by a failed run)
+        type: number
+        default: 0
       simulate:
         type: choice
         options: [none, deploy-error, stale, fail-all]
         default: none
-  # A run that failed twice leaves the site behind until someone notices; this redeploys within the hour.
+  # Last resort for a site left behind (a run that failed all its retries): redeploy when the live stamp is not main's.
   schedule:
     - cron: '*/10 * * * *'
 
@@ -61,6 +65,7 @@ jobs:
       contents: read
       pages: write
       id-token: write
+      actions: write
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url || steps.redeploy.outputs.page_url }}
@@ -141,3 +146,11 @@ jobs:
         env:
           LEVEL: error
         run: *verify
+      # Both attempts failed (GitHub's cron can lag for hours, so don't wait for it): run the workflow again in
+      # 5 minutes, twice at most. A cancelled run (a newer push) does not get here.
+      - name: Try again in 5 minutes
+        if: failure() && inputs.attempt < 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTEMPT: ${{ inputs.attempt }}
+        run: sleep 300 && gh workflow run pages.yml -R "$GITHUB_REPOSITORY" --ref main -f attempt=$(( ${ATTEMPT:-0} + 1 ))
